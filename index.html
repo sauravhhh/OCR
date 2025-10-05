@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile OCR Scanner</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-white': '#FFFFFF',
+                        'light-gray': '#F9FAFB',
+                        'accent-blue': '#4F46E5',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Base styles for Inter font and smooth transitions */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F0F4F8; /* Very light background for contrast */
+        }
+        /* Custom styling for file input for better mobile touch target */
+        .file-input-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        /* Hide the default file input but keep it accessible */
+        .file-input {
+            width: 0.1px;
+            height: 0.1px;
+            opacity: 0;
+            overflow: hidden;
+            position: absolute;
+            z-index: -1;
+        }
+        /* Text area custom focus */
+        .result-textarea:focus {
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.5); /* Blue shadow on focus */
+            border-color: #4F46E5;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 flex flex-col items-center">
+
+    <div id="app-container" class="w-full max-w-lg bg-primary-white shadow-xl rounded-2xl p-6 md:p-8 space-y-6">
+
+        <!-- Header -->
+        <header class="text-center space-y-1">
+            <h1 class="text-3xl font-extrabold text-gray-800">Mobile OCR Scanner</h1>
+            <p class="text-gray-500 text-sm">Convert text from images, fast and accurately.</p>
+        </header>
+
+        <!-- File Upload Section -->
+        <div id="upload-section">
+            <label for="image-upload" class="file-input-container w-full h-32 border-2 border-dashed border-gray-300 rounded-xl transition duration-200 hover:border-accent-blue bg-light-gray">
+                <input type="file" id="image-upload" class="file-input" accept="image/*" onchange="displayFileName(this)">
+                <div id="upload-placeholder" class="text-center p-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16m-4-2h4m0 0v4m-4-4V8m4 4h-4" />
+                    </svg>
+                    <p class="mt-2 text-sm text-gray-600 font-medium">Click to select an image</p>
+                    <p id="file-name" class="mt-1 text-xs text-gray-500 truncate"></p>
+                </div>
+            </label>
+        </div>
+
+        <!-- Action Button -->
+        <button id="ocr-button" onclick="processOCR()" class="w-full py-3 px-4 bg-accent-blue text-white font-semibold rounded-xl shadow-md hover:bg-indigo-700 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed">
+            Perform OCR
+        </button>
+
+        <!-- Loading & Status Area -->
+        <div id="status-area" class="text-center hidden">
+            <div id="loading-spinner" class="animate-spin inline-block w-6 h-6 border-4 border-t-4 border-gray-200 border-t-accent-blue rounded-full"></div>
+            <p id="status-message" class="mt-2 text-sm text-gray-600 font-medium">Processing image...</p>
+        </div>
+        
+        <!-- Error/Message Box (Replaces alert()) -->
+        <div id="message-box" class="hidden p-3 rounded-lg bg-red-100 text-red-700 border border-red-300" role="alert">
+            <p id="message-text" class="text-sm font-medium"></p>
+        </div>
+
+        <!-- Result Section -->
+        <div id="result-section" class="hidden space-y-4 pt-4">
+            <h2 class="text-xl font-bold text-gray-800">Recognized Text</h2>
+            <textarea id="ocr-result" class="result-textarea w-full h-48 p-4 text-gray-700 border border-gray-300 rounded-lg resize-none transition duration-150" readonly placeholder="Your recognized text will appear here."></textarea>
+
+            <!-- Secondary Actions -->
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button onclick="copyText()" class="w-full sm:w-1/3 py-3 px-4 bg-green-500 text-white font-semibold rounded-xl shadow-md hover:bg-green-600 transition duration-150 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z" /><path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h4a2 2 0 00-2-2H5z" /></svg>
+                    Copy
+                </button>
+                <button onclick="shareText()" class="w-full sm:w-1/3 py-3 px-4 bg-blue-500 text-white font-semibold rounded-xl shadow-md hover:bg-blue-600 transition duration-150 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path d="M15 8a3 3 0 10-2.977-2.977A4 4 0 1010 11.216V13a2 2 0 100 4h.001v-2.185A4.001 4.001 0 0015 8zm-2.01-6.993a2 2 0 012 2c0 1.096-.904 2-2 2s-2-.904-2-2a2 2 0 012-2z" /></svg>
+                    Share
+                </button>
+                <button onclick="resetApp()" class="w-full sm:w-1/3 py-3 px-4 bg-gray-400 text-white font-semibold rounded-xl shadow-md hover:bg-gray-500 transition duration-150 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.416 7.234 1 1 0 014 6.9V3a1 1 0 011-1zm1 14a1 1 0 00-1-1v-2.101a7.002 7.002 0 0111.601-2.566 1 1 0 11-1.885-.666 5.002 5.002 0 00-8.204 2.871 1 1 0 011.414.288l1.414 1.414a1 1 0 01-1.414 1.414l-1.414-1.414A1 1 0 004 17a1 1 0 001-1z" clip-rule="evenodd" /></svg>
+                    Reset
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-8 text-sm text-gray-500">
+        Made with ❤️ by Sauravhhh
+    </footer>
+
+    <script>
+        const API_KEY = "K85136435588957";
+        const OCR_URL = "https://api.ocr.space/parse/image";
+        const MAX_RETRIES = 3;
+        const BASE_DELAY_MS = 1000;
+
+        // --- DOM Elements ---
+        const fileInput = document.getElementById('image-upload');
+        const ocrButton = document.getElementById('ocr-button');
+        const ocrResult = document.getElementById('ocr-result');
+        const fileNameDisplay = document.getElementById('file-name');
+        const statusArea = document.getElementById('status-area');
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+        const resultSection = document.getElementById('result-section');
+
+        /**
+         * Shows a custom message box instead of using alert().
+         * @param {string} message - The message to display.
+         * @param {string} type - 'error' or 'success'.
+         */
+        function showMessage(message, type = 'error') {
+            messageText.textContent = message;
+            messageBox.className = 'p-3 rounded-lg border text-sm font-medium transition-all duration-300';
+            messageBox.classList.remove('hidden');
+
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'text-red-700', 'border-red-300');
+            } else if (type === 'success') {
+                messageBox.classList.add('bg-green-100', 'text-green-700', 'border-green-300');
+            }
+            // Hide the message after 5 seconds
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 5000);
+        }
+
+        /**
+         * Utility function to handle fetch requests with exponential backoff.
+         */
+        async function fetchWithRetry(url, options, retries = 0) {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response;
+            } catch (error) {
+                if (retries < MAX_RETRIES) {
+                    const delay = BASE_DELAY_MS * Math.pow(2, retries);
+                    console.warn(`Request failed. Retrying in ${delay}ms... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return fetchWithRetry(url, options, retries + 1);
+                } else {
+                    console.error("Max retries reached. Request failed permanently.", error);
+                    throw new Error("Failed to connect to OCR service after multiple retries.");
+                }
+            }
+        }
+
+
+        /**
+         * Main function to process the image and get OCR text.
+         */
+        async function processOCR() {
+            const file = fileInput.files[0];
+            if (!file) {
+                showMessage("Please select an image file first.");
+                return;
+            }
+
+            // --- UI State: Loading ---
+            ocrButton.disabled = true;
+            statusArea.classList.remove('hidden');
+            document.getElementById('status-message').textContent = 'Processing image... (may take a moment)';
+            messageBox.classList.add('hidden');
+            resultSection.classList.add('hidden');
+            ocrResult.value = '';
+
+            try {
+                const formData = new FormData();
+                formData.append('apikey', API_KEY);
+                formData.append('language', 'eng'); // Default to English
+                formData.append('file', file);
+                formData.append('isOverlayRequired', 'false');
+
+                const response = await fetchWithRetry(OCR_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                // FIX: Added robust check to ensure data.ErrorMessage is an array before accessing .length or .join()
+                if (data.IsErroredOnProcessing || (Array.isArray(data.ErrorMessage) && data.ErrorMessage.length > 0)) {
+                    // Safely join error messages, falling back to a generic error message if the array is missing/empty.
+                    throw new Error(Array.isArray(data.ErrorMessage) ? data.ErrorMessage.join(' | ') : 'OCR service reported an error.');
+                }
+
+                if (data.ParsedResults && data.ParsedResults.length > 0) {
+                    const parsedText = data.ParsedResults.map(r => r.ParsedText).join('\n').trim();
+                    if (parsedText) {
+                        ocrResult.value = parsedText;
+                        resultSection.classList.remove('hidden');
+                        showMessage("OCR successful!", 'success');
+                    } else {
+                        throw new Error("No text was recognized in the image.");
+                    }
+                } else {
+                    throw new Error("OCR failed to return parsed results.");
+                }
+
+            } catch (error) {
+                console.error("OCR Error:", error);
+                ocrResult.value = `Error: ${error.message}`;
+                showMessage(`OCR Error: ${error.message}`);
+            } finally {
+                // --- UI State: Done ---
+                ocrButton.disabled = false;
+                statusArea.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Copies the recognized text to the clipboard.
+         */
+        function copyText() {
+            ocrResult.select();
+            // Use document.execCommand('copy') for better compatibility in iframes
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showMessage("Text copied to clipboard!", 'success');
+                } else {
+                    throw new Error("Copy command failed.");
+                }
+            } catch (err) {
+                console.error('Fallback: Could not copy text', err);
+                showMessage("Could not copy text. Please try manually.", 'error');
+            }
+            window.getSelection().removeAllRanges(); // Deselect text
+        }
+
+        /**
+         * Uses the Web Share API for sharing text on mobile devices.
+         */
+        function shareText() {
+            const textToShare = ocrResult.value;
+
+            if (!textToShare) {
+                showMessage("Nothing to share. Please perform OCR first.", 'error');
+                return;
+            }
+
+            if (navigator.share) {
+                navigator.share({
+                    title: 'OCR Scan Result',
+                    text: textToShare,
+                })
+                .then(() => console.log('Successful share'))
+                .catch((error) => {
+                    console.error('Error sharing:', error);
+                    showMessage("Share failed or was canceled.", 'error');
+                });
+            } else {
+                showMessage("Web Share API is not supported on this device. Use the Copy button instead.", 'error');
+            }
+        }
+
+        /**
+         * Resets the application state.
+         */
+        function resetApp() {
+            fileInput.value = ''; // Clear file input
+            ocrResult.value = ''; // Clear result area
+            fileNameDisplay.textContent = ''; // Clear file name
+            resultSection.classList.add('hidden');
+            statusArea.classList.add('hidden');
+            messageBox.classList.add('hidden');
+            ocrButton.disabled = false;
+            showMessage("Application reset.", 'success');
+        }
+
+        /**
+         * Displays the selected file name in the upload area.
+         */
+        function displayFileName(input) {
+            if (input.files && input.files[0]) {
+                fileNameDisplay.textContent = `File selected: ${input.files[0].name}`;
+                // Automatically attempt OCR after selecting a file (optional, but good UX)
+                // processOCR(); 
+            } else {
+                fileNameDisplay.textContent = '';
+            }
+            // Clear previous results/messages on new file selection
+            ocrResult.value = ''; 
+            resultSection.classList.add('hidden');
+            messageBox.classList.add('hidden');
+        }
+
+    </script>
+</body>
+</html>
